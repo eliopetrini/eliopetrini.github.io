@@ -1,3 +1,4 @@
+
 let state = {
     board: [
     [ '', '', '', '', '', '', '' ],
@@ -56,6 +57,7 @@ function createBoardCell(value) {
             const column = 6-index%7
             let updatedeCell = setPieceOnCell(returnNode, column);
             updatedeCell.removeEventListener("mousedown", handleCellClick);
+            verifyWinner()
         }
         returnNode.addEventListener("mousedown", handleCellClick)
     }    
@@ -94,7 +96,9 @@ function findNextFreeCellInColumn(cell, column, currentColor) {
 
 function resetBoard() {
     state.board = Array(6).fill('').map(el => Array(7).fill(''))
+    document.querySelector(".whowon").innerHTML = ""       
     showBoard()
+    allowClicks()
 }
 
 function updateCurrentPlayer() {
@@ -104,4 +108,25 @@ function updateCurrentPlayer() {
         document.querySelector(".whosturn").innerHTML = "Blue player's turn"
     }
 
+}
+
+function verifyWinner() {
+    if (connect4Winner('r', state.board)) {
+        document.querySelector(".whowon").innerHTML = "Red player won!"
+        blockClicks()        
+    } else if (connect4Winner('b', state.board)) {
+        document.querySelector(".whowon").innerHTML = "Blue player won!"
+        blockClicks()            
+    }
+
+}
+
+function blockClicks() {
+    const boardContainer = document.querySelector(".board");
+    boardContainer.style.pointerEvents = 'none';
+}
+
+function allowClicks() {
+    const boardContainer = document.querySelector(".board");
+    boardContainer.style.pointerEvents = 'auto';
 }
