@@ -1,0 +1,326 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Vier gewinnt</title>
+  <link rel="stylesheet" href="styles.css">
+  <script type="module">
+
+import { render, useSJDON } from "./lib/suiweb-1.1.js"
+
+
+
+let state = {
+  board: [
+    [ '', '', '', '', '', '', '' ],
+    [ '', '', '', '', '', '', '' ],
+    [ '', '', '', '', '', '', '' ],
+    [ '', '', '', '', '', '', '' ],
+    [ '', '', '', '', '', '', '' ],
+    [ '', '', '', '', '', '', '' ]
+  ],
+  next: 'b'
+}
+
+let stateSeq = []
+
+const SERVICE = "http://localhost:3000/api/data/c4state?api-key=c4game"
+const url = "http://localhost:3000/"
+let gameID = ""
+
+// using components 
+
+const App = () => [Board, {board: state.board}] 
+
+const Board = ({board}) => {
+ let flatBoard = [].concat(...board)
+ let fields = flatBoard.map((type) => [Field, {type}])
+ return (
+ ["div", {className: "board"}, ...fields]
+ )
+}
+
+const Field = ({type}) => {
+  if (type == "r") {
+    return (
+      ["div", {className: "field"}, ["div", {className: "piece red"}, ""]]
+    )
+  } else if (type == "b") {
+    return (
+      ["div", {className: "field"}, ["div", {className: "piece blue"}, ""]]
+    )
+  } else {
+    return (
+      ["div", {className: "field"}, ""]
+    )
+  }
+
+}
+
+
+
+//  Initialize game
+//
+function initGame () {
+  let board = showBoard()
+  gameID = getID()
+  attachEventHandler(board)
+}
+
+function renderSJDON(element, root) {
+    let node = document.createElement(element[0])
+    if (typeof element[1] === "object" && !Array.isArray(element[1])) {
+        Object.keys(element[1]).forEach(key => {
+            node.setAttribute(key, element[1][key]);
+        });
+    }
+    for (let i = 2; i < element.length; i++) {
+        let child = element[i];
+        if (typeof child === "string") {
+            node.appendChild(document.createTextNode(child));
+        } else if (Array.isArray(child)) {
+            renderSJDON(child, node);
+        }
+    }
+    root.appendChild(node)
+}
+
+//  Show board
+// 
+function showBoard () {
+  const app = document.querySelector(".app")
+  app.innerHTML = ""
+  render([App], app)
+  return app
+}
+
+function createBoardCell(value) {
+    const piece =
+    value === "r"
+      ? ["div", { class: "red piece" }, ""]
+      : value === "b"
+      ? ["div", { class: "blue piece" }, ""]
+      : null;
+    let returnNode = ["div", { class: "field" }, ...(piece ? [piece] : [])]
+    return returnNode;
+}
+
+function setPieceOnCell(returnNode,column) {
+    let currentColor = state.next
+    let piece
+    if (currentColor === "r") {
+        piece = elt("div", { class: "red piece" }, "")
+        state.next = "b"
+    } else if (currentColor === "b") {
+        piece = elt("div", { class: "blue piece" }, "")
+        state.next = "r"
+    }
+
+    console.log(state)
+    //save last state for undo
+    let oldstate = {}
+    //let updatedBoard = setIn2DList(state.board, row, column, currentColor)
+    oldstate = setInObj(oldstate, "next", currentColor)
+    let oldboard = state.board.map(row => [...row]);
+    oldstate = setInObj(oldstate, "board", oldboard)
+    stateSeq.push(oldstate)
+    console.log(oldstate)
+
+    updateCurrentPlayer()  
+    let cellToBeUpdated = findNextFreeCellInColumn(returnNode, column, currentColor)
+    cellToBeUpdated.appendChild(piece)
+    return cellToBeUpdated
+}
+
+function setInList(list, index, value) {
+  return list.map((item, i) => (i === index ? value : item));
+}
+
+function setIn2DList(matrix, rowIndex, colIndex, value) {
+  const updatedRow = setInList(matrix[rowIndex], colIndex, value);
+  return setInList(matrix, rowIndex, updatedRow);
+}
+
+function setInObj(obj, key, value) {
+  return { ...obj, [key]: value };
+}
+
+
+function findNextFreeCellInColumn(cell, column, currentColor) {
+    let cellToBeUpdated
+    const cells = Array.from(document.querySelector(".board").children)
+    for (let row = state.board.length-1; row >= 0; row--) {
+       if (state.board[row][column] == "") {
+            state.board[row][column] = currentColor
+            let cellDivIndex = (row)*7+(column) //(row)*7+(6-column)
+            cellToBeUpdated = cells[cellDivIndex]
+            break;
+       }
+    }
+    return cellToBeUpdated
+}
+
+function resetBoard() {
+    state.board = Array(6).fill('').map(el => Array(7).fill(''))
+    document.querySelector(".whowon").innerHTML = ""       
+    showBoard()
+    allowClicks()
+}
+
+
+function updateCurrentPlayer() {
+    if (state.next === "r") {
+        document.querySelector(".whosturn").innerHTML = "Red player's turn"
+    } else {
+        document.querySelector(".whosturn").innerHTML = "Blue player's turn"
+    }
+
+}
+
+function verifyWinner() {
+    if (connect4Winner('r', state.board)) {
+        document.querySelector(".whowon").innerHTML = "Red player won!"
+        blockClicks()        
+    } else if (connect4Winner('b', state.board)) {
+        document.querySelector(".whowon").innerHTML = "Blue player won!"
+        blockClicks()            
+    }
+
+}
+
+function blockClicks() {
+    const boardContainer = document.querySelector(".board");
+    boardContainer.style.pointerEvents = 'none';
+}
+
+function allowClicks() {
+    const boardContainer = document.querySelector(".board");
+    boardContainer.style.pointerEvents = 'auto';
+}
+
+
+
+//  Helper function for DOM manipulation
+// 
+function elt (type, attrs, ...children) {
+  let node = document.createElement(type)
+  Object.keys(attrs).forEach(key => {
+    node.setAttribute(key, attrs[key])
+  })
+  for (let child of children) {
+    if (typeof child != "string") node.appendChild(child)
+    else node.appendChild(document.createTextNode(child))
+  }
+  return node
+}
+
+
+//  Attach event handler to board
+//
+function attachEventHandler (board) {
+  document.getElementById("resetBoard").addEventListener("click", resetBoard);
+  document.getElementById("loadState").addEventListener("click", loadState);
+  document.getElementById("saveState").addEventListener("click", saveState);
+  document.getElementById("loadStateBrowser").addEventListener("click", loadStateBrowser);
+  document.getElementById("saveStateBrowser").addEventListener("click", saveStateBrowser);
+  document.getElementById("undo").addEventListener("click", undo);
+  board.addEventListener("click", (e) => {
+    
+    // ...
+    // your implementation
+    // ...
+    function handleCellClick(target) {
+            //need to find which column i'm at
+            const cells = Array.from(board.querySelectorAll(".field"))
+            const index = cells.indexOf(target.closest(".field"))
+            const column = index%7
+            let updatedeCell = setPieceOnCell(target, column);
+            updatedeCell.removeEventListener("mousedown", handleCellClick);
+            verifyWinner()
+        }     
+    handleCellClick(e.target)
+   // showBoard()
+  })
+}
+
+
+//  Get current state from server and re-draw board
+//
+function loadState () {
+  fetch(url + "api/data/" + gameID + "?api-key=c4game", {
+      method: 'GET',
+      headers: {'Content-type': 'application/json'},
+    }).then(response => response.json())
+    .then(data => { 
+      state = data
+      showBoard()
+     })
+}
+
+//  Put current state to server
+//
+function saveState () {
+    fetch(url + "api/data/" + gameID + "?api-key=c4game", {
+      method: 'PUT',
+      headers: {'Content-type': 'application/json'},
+      body: JSON.stringify(state)
+    })
+}
+
+function getID() {
+  fetch(url + "api/data/?api-key=c4game", {
+      method: 'POST',
+      headers: {'Content-type': 'application/json'},
+      body: JSON.stringify(state)
+    }).then(response => response.json())
+    .then(data => { gameID = data.id })
+}
+
+
+function loadStateBrowser () {
+  state = JSON.parse(localStorage.getItem("state"));
+  showBoard()
+}
+
+
+function saveStateBrowser () {
+    localStorage.setItem("state", JSON.stringify(state));
+}
+
+function undo() {
+  console.log(state)
+  let oldStateToRestore = stateSeq.pop()
+  if (oldStateToRestore == undefined) {
+    state.board = Array(6).fill('').map(el => Array(7).fill(''))
+  } else {
+    state = oldStateToRestore
+  }
+  showBoard()
+}
+
+useSJDON(Field, Board, App) 
+initGame()
+  </script>
+   <script src="connect4-winner.js"></script> 
+</head>
+<body>
+
+  <!--<div class="board"></div>-->
+  <div class="app"></div>
+  <div class="controls">
+    <button id="resetBoard">Reset board</button><br />
+    <button id="loadState">Load (server)</button>
+    <button id="saveState">Save (server)</button> <br />
+    <button id="loadStateBrowser">Load (browser)</button>
+    <button id="saveStateBrowser">Save (browser)</button><br />
+    <button id="undo">Undo</button>
+    <p class="whowon"></p>
+    <p class="whosturn">Blue player's turn</p>
+  </div>
+
+  <script>
+
+  </script>
+
+</body>
+</html>
